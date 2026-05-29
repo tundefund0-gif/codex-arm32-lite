@@ -174,7 +174,7 @@ async function parseLocalToolCalls(content) {
         const toolOnlyKey = parsed.tool;
         const count = (seenPatterns.get(toolOnlyKey) || 0) + 1;
         seenPatterns.set(toolOnlyKey, count);
-        if (count > 3) continue;
+        if (count > 5) continue;
 
         calls.push({
           id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,

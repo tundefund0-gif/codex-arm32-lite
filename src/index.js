@@ -491,8 +491,8 @@ async function handleSlashCommand(text) {
 
 async function runAgent(messages) {
   let loopCount = 0;
-  let lastToolNames = [];
-  let lastToolHashes = [];
+  let lastHashes = [];
+  let emptyContentCount = 0;
   do {
     const instructions = loadProjectInstructions(process.cwd());
     const systemMsg = { role: 'system', content: getSystemPrompt(instructions) };
@@ -513,6 +513,8 @@ async function runAgent(messages) {
 
     const { content, reasoningContent, toolCalls } = response;
 
+    let hasContent = content && content.trim().length > 0;
+
     if (content) {
       const last = messages[messages.length - 1];
       const msg = { role: 'assistant', content };
@@ -520,6 +522,16 @@ async function runAgent(messages) {
       if (last?.role === 'assistant' && !last.tool_calls) Object.assign(last, msg);
       else messages.push(msg);
     }
+
+    if (!hasContent && (!toolCalls || toolCalls.length === 0)) {
+      emptyContentCount++;
+      if (emptyContentCount >= 2) {
+        process.stdout.write('\x1b[90m(empty response — continuing)\x1b[0m\n');
+        return;
+      }
+      continue;
+    }
+    emptyContentCount = 0;
 
     if (!toolCalls || toolCalls.length === 0) return;
 
@@ -536,26 +548,13 @@ async function runAgent(messages) {
       messages[messages.length - 1] = asstMsg;
     } else messages.push(asstMsg);
 
-    const currentNames = toolCalls.map(tc => tc.function.name);
     const currentHashes = toolCalls.map(tc => tc.function.name + '|' + tc.function.arguments);
-    lastToolNames.push(currentNames);
-    lastToolHashes.push(currentHashes);
-    if (lastToolNames.length > 5) lastToolNames.shift();
-    if (lastToolHashes.length > 5) lastToolHashes.shift();
-
-    if (lastToolNames.length >= 3) {
-      const last3 = lastToolNames.slice(-3);
-      if (last3[0].length === last3[1].length && last3[1].length === last3[2].length &&
-          last3[0].every((v, i) => v === last3[1][i] && v === last3[2][i])) {
-        console.warn('\n  \x1b[33m⚠ Repetitive tool calls detected. Breaking loop.\x1b[0m');
-        break;
-      }
-    }
-    if (lastToolHashes.length >= 3) {
-      const last3 = lastToolHashes.slice(-3);
-      if (last3[0].length === last3[1].length && last3[1].length === last3[2].length &&
-          last3[0].every((v, i) => v === last3[1][i] && v === last3[2][i])) {
-        console.warn('\n  \x1b[33m⚠ Duplicate tool call sequence detected. Breaking loop.\x1b[0m');
+    lastHashes.push(currentHashes);
+    if (lastHashes.length > 8) lastHashes.shift();
+    if (lastHashes.length >= 6) {
+      const last6 = lastHashes.slice(-6);
+      if (last6.every((h, i) => i === 0 || (h.length === last6[0].length && h.every((v, j) => v === last6[0][j])))) {
+        process.stdout.write('\n  \x1b[33m⚠ Stuck in loop. Breaking.\x1b[0m\n');
         break;
       }
     }

@@ -264,7 +264,8 @@ async function handleChat(req, res) {
 
 async function runAgentWeb(messages, res, signal) {
   let loopCount = 0;
-  let lastToolHashes = [];
+  let lastHashes = [];
+  let emptyContentCount = 0;
   do {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -280,6 +281,8 @@ async function runAgentWeb(messages, res, signal) {
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
+    let hasContent = content && content.trim().length > 0;
+
     if (content) {
       const last = messages[messages.length - 1];
       const msg = { role: 'assistant', content };
@@ -291,16 +294,22 @@ async function runAgentWeb(messages, res, signal) {
       else messages.push(msg);
     }
 
+    if (!hasContent && (!toolCalls || toolCalls.length === 0)) {
+      emptyContentCount++;
+      if (emptyContentCount >= 2) break;
+      continue;
+    }
+    emptyContentCount = 0;
+
     if (!toolCalls || toolCalls.length === 0) return;
 
     const currentHashes = toolCalls.map(tc => tc.function.name + '|' + tc.function.arguments);
-    lastToolHashes.push(currentHashes);
-    if (lastToolHashes.length > 5) lastToolHashes.shift();
-    if (lastToolHashes.length >= 3) {
-      const last3 = lastToolHashes.slice(-3);
-      if (last3[0].length === last3[1].length && last3[1].length === last3[2].length &&
-          last3[0].every((v, i) => v === last3[1][i] && v === last3[2][i])) {
-        sendSSE(res, { type: 'token', content: '\n\n[Detected repetition — stopping]' });
+    lastHashes.push(currentHashes);
+    if (lastHashes.length > 8) lastHashes.shift();
+    if (lastHashes.length >= 6) {
+      const last6 = lastHashes.slice(-6);
+      if (last6.every((h, i) => i === 0 || (h.length === last6[0].length && h.every((v, j) => v === last6[0][j])))) {
+        sendSSE(res, { type: 'token', content: '\n\n[Stuck in loop — stopping]' });
         break;
       }
     }
