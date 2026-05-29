@@ -181,6 +181,7 @@ export function updateTokenCache(input, output, cost) {
   cache.totalInput += input;
   cache.totalOutput += output;
   cache.totalCost += cost;
+  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
   writeFileSync(TOKEN_CACHE_PATH, JSON.stringify(cache));
 }
 
