@@ -94,7 +94,7 @@ export async function chatWithTools(messages, tools, onChunk) {
       tools: apiTools,
       tool_choice: apiTools ? 'auto' : undefined,
       stream: true,
-      temperature: 0,
+      temperature: 0.4,
     });
 
     for await (const chunk of stream) {
@@ -159,6 +159,7 @@ export async function chatWithTools(messages, tools, onChunk) {
 async function parseLocalToolCalls(content) {
   const calls = [];
   const seen = new Set();
+  const seenPatterns = new Map();
 
   const jsonRegex = /\{(?:[^{}]|"(?:\\.|[^"\\])*")*}/g;
   let match;
@@ -169,6 +170,12 @@ async function parseLocalToolCalls(content) {
         const key = parsed.tool + JSON.stringify(parsed.args);
         if (seen.has(key)) continue;
         seen.add(key);
+
+        const toolOnlyKey = parsed.tool;
+        const count = (seenPatterns.get(toolOnlyKey) || 0) + 1;
+        seenPatterns.set(toolOnlyKey, count);
+        if (count > 3) continue;
+
         calls.push({
           id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           type: 'function',

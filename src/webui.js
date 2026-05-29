@@ -264,6 +264,7 @@ async function handleChat(req, res) {
 
 async function runAgentWeb(messages, res, signal) {
   let loopCount = 0;
+  let lastToolHashes = [];
   do {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -291,6 +292,18 @@ async function runAgentWeb(messages, res, signal) {
     }
 
     if (!toolCalls || toolCalls.length === 0) return;
+
+    const currentHashes = toolCalls.map(tc => tc.function.name + '|' + tc.function.arguments);
+    lastToolHashes.push(currentHashes);
+    if (lastToolHashes.length > 5) lastToolHashes.shift();
+    if (lastToolHashes.length >= 3) {
+      const last3 = lastToolHashes.slice(-3);
+      if (last3[0].length === last3[1].length && last3[1].length === last3[2].length &&
+          last3[0].every((v, i) => v === last3[1][i] && v === last3[2][i])) {
+        sendSSE(res, { type: 'token', content: '\n\n[Detected repetition — stopping]' });
+        break;
+      }
+    }
 
     const asstMsg = {
       role: 'assistant', content: content || null,

@@ -2,22 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>Codex CLI</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌘</text></svg>">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{--bg:#080810;--surface:#0f0f1a;--surface2:#16162a;--border:#1e1e36;--text:#d0d0e0;--text-dim:#7a7a94;--accent:#7c5cfc;--accent2:#5a3fd4;--accent-glow:rgba(124,92,252,.2);--green:#4ade80;--orange:#fb923c;--red:#ef4444;--pink:#e879f9;--radius:10px;--sidebar-w:280px;--font:ui-monospace,'SFMono-Regular','Cascadia Code',monospace}
-body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;overflow:hidden;display:flex}
+body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;height:100dvh;overflow:hidden;display:flex}
 ::selection{background:var(--accent);color:#fff}
-::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:transform .3s,width .3s;overflow:hidden;z-index:10}
-.sidebar.hidden{width:0;border:none}
-.sidebar.hidden .sidebar-inner{transform:translateX(-100%)}
-.sidebar-inner{display:flex;flex-direction:column;height:100%;width:var(--sidebar-w);min-width:var(--sidebar-w)}
-.sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;z-index:100;transform:translateX(0);transition:transform .25s ease,visibility .25s;visibility:visible;overflow:hidden}
+.sidebar.hidden{transform:translateX(-100%);visibility:hidden}
+.sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
 .sidebar-header h2{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
 .sidebar-header h2 span{background:var(--accent);color:#fff;font-size:9px;padding:1px 6px;border-radius:3px}
 .sidebar-header button{background:var(--accent);border:none;color:#fff;padding:5px 12px;border-radius:6px;font-size:11px;font-family:var(--font);cursor:pointer;font-weight:600}
@@ -27,7 +25,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh
 .sidebar-tabs button:hover{color:var(--text)}
 .sidebar-tabs button.active{color:var(--accent)}
 .sidebar-tabs button.active::after{content:'';position:absolute;bottom:0;left:20%;right:20%;height:2px;background:var(--accent);border-radius:1px}
-.sidebar-content{flex:1;overflow-y:auto;padding:8px}
+.sidebar-content{flex:1;overflow-y:auto;padding:8px;overscroll-behavior:contain}
 .sidebar-content .section-title{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);padding:12px 8px 4px;font-weight:600}
 .session-item{padding:8px 10px;border-radius:6px;cursor:pointer;transition:background .15s;margin-bottom:2px}
 .session-item:hover{background:var(--surface2)}
@@ -42,101 +40,133 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh
 .skill-item .s-name{font-size:12px;font-weight:600;color:var(--text)}
 .skill-item .s-desc{font-size:10px;color:var(--text-dim);margin-top:2px}
 .skill-item .s-badge{display:inline-block;background:var(--accent-glow);color:var(--accent);font-size:9px;padding:1px 6px;border-radius:3px;margin-top:4px;font-weight:600}
-.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
-header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:14px;flex-shrink:0;position:relative}
-.menu-btn{background:transparent;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;padding:4px 6px;border-radius:4px;line-height:1}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;width:100%}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:10px;flex-shrink:0;position:relative;min-height:44px}
+.menu-btn{background:transparent;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;padding:4px 6px;border-radius:4px;line-height:1;display:flex;align-items:center}
 .menu-btn:hover{color:var(--text);background:var(--surface2)}
-header .logo{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
-header .logo span{background:var(--accent);color:#fff;font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600}
-header .spacer{flex:1}
-header .hdr-status{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-dim)}
-header .hdr-status .dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block}
-.msgs{flex:1;overflow-y:auto;padding:16px 20px 0;display:flex;flex-direction:column;gap:4px}
-.msgs-inner{max-width:800px;width:100%;margin:0 auto}
+header .logo{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap}
+header .logo span{background:var(--accent);color:#fff;font-size:8px;padding:2px 5px;border-radius:3px;font-weight:600}
+header .spacer{flex:1;min-width:8px}
+header .hdr-status{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden}
+header .hdr-status .dot{width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0}
+header .hdr-status span:last-child{overflow:hidden;text-overflow:ellipsis}
+.msgs{flex:1;overflow-y:auto;padding:8px 8px 0;display:flex;flex-direction:column;gap:2px;overscroll-behavior:contain}
+.msgs-inner{max-width:min(800px,100%);width:100%;margin:0 auto}
 .msg{animation:fadeIn .2s ease-out;margin-bottom:2px}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.msg .head{display:flex;align-items:center;gap:8px;padding:4px 12px 2px;font-size:10px;color:var(--text-dim)}
-.msg .head .role{font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.msg .head .time{color:var(--text-dim);opacity:.6}
-.msg .head .copy-btn{margin-left:auto;background:transparent;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:3px;opacity:0;transition:opacity .2s}
-.msg:hover .head .copy-btn{opacity:1}
+.msg .head{display:flex;align-items:center;gap:6px;padding:4px 8px 2px;font-size:10px;color:var(--text-dim)}
+.msg .head .role{font-weight:600;text-transform:uppercase;letter-spacing:.5px;flex-shrink:0}
+.msg .head .time{color:var(--text-dim);opacity:.6;flex-shrink:0}
+.msg .head .copy-btn{margin-left:auto;background:transparent;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:3px;opacity:0;transition:opacity .2s;flex-shrink:0}
+.msg:hover .head .copy-btn,.msg .head .copy-btn:focus{opacity:1}
 .msg .head .copy-btn:hover{background:var(--surface2);color:var(--accent)}
-.msg.user .bubble{background:var(--accent);color:#fff;display:inline-block;padding:10px 16px;border-radius:12px 12px 4px 12px;font-size:13px;max-width:85%;line-height:1.5;word-break:break-word;margin-left:auto;margin-right:12px}
-.msg.assistant .bubble{background:var(--surface);border:1px solid var(--border);padding:14px 18px;border-radius:12px 12px 12px 4px;font-size:13px;line-height:1.6;word-break:break-word;white-space:pre-wrap;margin-left:12px;margin-right:auto}
+.msg.user{display:flex;flex-direction:column;align-items:flex-end}
+.msg.user .head{justify-content:flex-end}
+.msg.user .bubble{background:var(--accent);color:#fff;display:inline-block;padding:10px 14px;border-radius:12px 12px 4px 12px;font-size:13px;max-width:88%;line-height:1.5;word-break:break-word;margin-right:8px}
+.msg.assistant .bubble{background:var(--surface);border:1px solid var(--border);padding:12px 14px;border-radius:12px 12px 12px 4px;font-size:13px;line-height:1.6;word-break:break-word;white-space:pre-wrap;margin-left:8px;margin-right:8px;overflow-x:auto}
 .msg.assistant .bubble>*{white-space:normal}
-.msg.assistant .bubble :is(h1,h2,h3,h4){margin:12px 0 6px;color:var(--text);font-size:14px}
+.msg.assistant .bubble :is(h1,h2,h3,h4){margin:10px 0 5px;color:var(--text);font-size:14px}
 .msg.assistant .bubble p{margin:4px 0}
 .msg.assistant .bubble code{background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;font-family:var(--font);color:var(--accent)}
-.msg.assistant .bubble pre{background:var(--bg);border:1px solid var(--border);border-radius:6px;margin:8px 0;position:relative}
-.msg.assistant .bubble pre .copy{position:absolute;right:6px;top:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);padding:4px 8px;border-radius:4px;font-size:10px;cursor:pointer;font-family:var(--font);transition:all .15s;z-index:1}
+.msg.assistant .bubble pre{background:var(--bg);border:1px solid var(--border);border-radius:6px;margin:6px 0;position:relative;overflow:hidden}
+.msg.assistant .bubble pre .copy{position:absolute;right:4px;top:4px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);padding:3px 7px;border-radius:4px;font-size:10px;cursor:pointer;font-family:var(--font);transition:all .15s;z-index:1}
 .msg.assistant .bubble pre .copy:hover{background:var(--accent);color:#fff}
-.msg.assistant .bubble pre code{background:transparent;padding:12px 14px;display:block;overflow-x:auto;font-size:12px;line-height:1.5;color:var(--text);border:none}
-.msg.tool .bubble{padding:4px 12px;font-size:11px;color:var(--orange);display:flex;align-items:flex-start;gap:8px;margin-left:12px;margin-right:auto}
+.msg.assistant .bubble pre code{background:transparent;padding:10px 12px;display:block;overflow-x:auto;font-size:12px;line-height:1.5;color:var(--text);border:none}
+.msg.tool .bubble{padding:3px 10px;font-size:11px;color:var(--orange);display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-left:8px;margin-right:8px}
 .msg.tool .bubble .info{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .msg.tool .bubble .info .name{font-weight:600;color:var(--pink)}
-.msg.tool .bubble .info .args{color:var(--text-dim);font-size:10px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.msg.tool .bubble .result{margin-top:4px;margin-left:0;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);font-size:10px;max-height:80px;overflow-y:auto;width:100%;white-space:pre-wrap;font-family:var(--font)}
-.msg.reasoning .bubble{background:var(--surface);border:1px dashed var(--border);padding:8px 14px;border-radius:8px;font-size:11px;color:var(--text-dim);line-height:1.5;margin-left:12px;margin-right:auto;cursor:pointer;max-width:85%}
+.msg.tool .bubble .info .args{color:var(--text-dim);font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg.tool .bubble .result{margin-top:2px;padding:5px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);font-size:10px;max-height:120px;overflow-y:auto;width:100%;white-space:pre-wrap;font-family:var(--font)}
+.msg.reasoning .bubble{background:var(--surface);border:1px dashed var(--border);padding:6px 12px;border-radius:8px;font-size:11px;color:var(--text-dim);line-height:1.5;margin-left:8px;margin-right:8px;cursor:pointer}
 .msg.reasoning .bubble .summary{display:flex;align-items:center;gap:6px}
-.msg.reasoning .bubble .summary .arrow{transition:transform .2s}
+.msg.reasoning .bubble .summary .arrow{transition:transform .2s;flex-shrink:0}
 .msg.reasoning .bubble .summary .arrow.open{transform:rotate(90deg)}
-.msg.reasoning .bubble .content{display:none;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:11px;line-height:1.5;color:var(--text-dim);max-height:200px;overflow-y:auto}
+.msg.reasoning .bubble .content{display:none;margin-top:4px;padding-top:4px;border-top:1px solid var(--border);font-size:11px;line-height:1.5;color:var(--text-dim);max-height:200px;overflow-y:auto}
 .msg.reasoning .bubble .content.open{display:block}
-.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:12px;color:var(--text-dim);padding:40px;text-align:center}
-.empty-state h2{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.5px}
-.empty-state p{font-size:13px;max-width:360px;line-height:1.5}
-.empty-state .shortcuts{display:flex;gap:16px;margin-top:4px;font-size:11px}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:10px;color:var(--text-dim);padding:32px 20px;text-align:center}
+.empty-state h2{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.5px}
+.empty-state p{font-size:12px;max-width:320px;line-height:1.5}
+.empty-state .shortcuts{display:flex;gap:12px;margin-top:2px;font-size:10px;flex-wrap:wrap;justify-content:center}
 .empty-state .shortcuts span{display:flex;align-items:center;gap:4px}
-.empty-state .shortcuts kbd{background:var(--surface);border:1px solid var(--border);padding:2px 6px;border-radius:3px;font-size:10px;font-family:var(--font)}
-.input-wrap{flex-shrink:0;padding:12px 20px 18px;background:linear-gradient(0deg,var(--bg) 60%,transparent)}
-.input-row{max-width:800px;margin:0 auto;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;transition:border-color .2s}
+.empty-state .shortcuts kbd{background:var(--surface);border:1px solid var(--border);padding:2px 5px;border-radius:3px;font-size:9px;font-family:var(--font)}
+.input-wrap{flex-shrink:0;padding:8px 8px 12px;background:linear-gradient(0deg,var(--bg) 60%,transparent)}
+.input-row{max-width:min(800px,100%);margin:0 auto;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:3px;transition:border-color .2s}
 .input-row:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
-.input-row textarea{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:13px;padding:8px 10px;resize:none;line-height:1.4;min-height:20px;max-height:120px}
+.input-row textarea{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:14px;padding:8px 10px;resize:none;line-height:1.4;min-height:22px;max-height:100px}
 .input-row textarea::placeholder{color:var(--text-dim)}
-.input-row button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;align-self:flex-end;margin:4px;min-width:60px;display:flex;align-items:center;justify-content:center;gap:4px}
+.input-row button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;align-self:flex-end;margin:3px;min-width:54px;display:flex;align-items:center;justify-content:center;gap:4px}
 .input-row button:hover{background:var(--accent2)}
 .input-row button:disabled{opacity:.4;cursor:not-allowed}
 .input-row button.stop{background:var(--red)}
 .input-row button.stop:hover{background:#dc2626}
-.status-bar{max-width:800px;margin:6px auto 0;display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);padding:0 4px}
+.status-bar{max-width:min(800px,100%);margin:4px auto 0;display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);padding:0 4px}
 .streaming-dots{display:inline-flex;gap:3px;padding:4px 0}
-.streaming-dots span{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:bounce 1.2s ease-in-out infinite}
+.streaming-dots span{width:4px;height:4px;border-radius:50%;background:var(--accent);animation:bounce 1.2s ease-in-out infinite}
 .streaming-dots span:nth-child(2){animation-delay:.2s}
 .streaming-dots span:nth-child(3){animation-delay:.4s}
-.thinking-msg .bubble{background:var(--surface);border:1px solid var(--border);padding:14px 18px;border-radius:12px 12px 12px 4px;margin-left:12px;margin-right:auto;max-width:200px;display:flex;align-items:center;gap:10px}
-.thinking-msg .bubble .label{font-size:12px;color:var(--text-dim)}
-.thinking-msg .bubble .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+.thinking-msg .bubble{background:var(--surface);border:1px solid var(--border);padding:10px 14px;border-radius:12px 12px 12px 4px;margin-left:8px;margin-right:8px;display:flex;align-items:center;gap:10px}
+.thinking-msg .bubble .label{font-size:11px;color:var(--text-dim)}
+.thinking-msg .bubble .spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
-.pulse-bar{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:200% 100%;animation:pulseBar 1.5s ease-in-out infinite;opacity:.6}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+.pulse-bar{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:200% 100%;animation:pulseBar 1.5s ease-in-out infinite;opacity:.6;pointer-events:none}
 @keyframes pulseBar{0%{background-position:200% 0}100%{background-position:-200% 0}}
-#toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);padding:8px 16px;border-radius:6px;font-size:11px;color:var(--text);opacity:0;transition:opacity .3s;pointer-events:none;z-index:100}
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s}
+.overlay.show{opacity:1;visibility:visible}
+#toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);padding:6px 14px;border-radius:6px;font-size:11px;color:var(--text);opacity:0;transition:opacity .3s;pointer-events:none;z-index:200}
 #toast.show{opacity:1}
+@media(max-width:640px){
+  .sidebar{width:85vw;max-width:300px}
+  header{padding:6px 8px;gap:6px}
+  header .logo{font-size:12px}
+  header .logo span{font-size:7px}
+  header .hdr-status{font-size:9px;gap:4px}
+  header .hdr-status span:last-child{max-width:80px}
+  .msgs{padding:4px 4px 0}
+  .msg.user .bubble{padding:8px 12px;font-size:13px;max-width:92%;margin-right:4px}
+  .msg.assistant .bubble{padding:10px 12px;font-size:13px;margin-left:4px;margin-right:4px}
+  .msg.reasoning .bubble{margin-left:4px;margin-right:4px}
+  .msg.tool .bubble{margin-left:4px;margin-right:4px}
+  .input-wrap{padding:6px 4px 8px}
+  .input-row textarea{font-size:16px}
+  .status-bar{font-size:8px}
+  .empty-state h2{font-size:16px}
+  .empty-state p{font-size:11px}
+}
+@media(min-width:1024px){
+  .sidebar{position:static;transform:none;visibility:visible}
+  .overlay{display:none}
+  .menu-btn{display:none}
+  header{padding:8px 16px}
+  .msgs{padding:12px 16px 0}
+  .msg.user .bubble{margin-right:16px}
+  .msg.assistant .bubble{margin-left:16px;margin-right:16px}
+  .input-wrap{padding:8px 16px 14px}
+}
 </style>
 </head>
 <body>
+<div class="overlay" id="overlay"></div>
 <div class="sidebar" id="sidebar">
-  <div class="sidebar-inner">
-    <div class="sidebar-header">
-      <h2>⌘ codex <span>v1</span></h2>
-      <button id="newChatBtn">+ New</button>
-    </div>
-    <div class="sidebar-tabs">
-      <button class="active" data-tab="sessions" id="tabSessions">Chats</button>
-      <button data-tab="skills" id="tabSkills">Skills</button>
-    </div>
-    <div class="sidebar-content" id="sidebarContent"></div>
+  <div class="sidebar-header">
+    <h2>⌘ codex <span>lite</span></h2>
+    <button id="newChatBtn">+ New</button>
   </div>
+  <div class="sidebar-tabs">
+    <button class="active" data-tab="sessions" id="tabSessions">Chats</button>
+    <button data-tab="skills" id="tabSkills">Skills</button>
+  </div>
+  <div class="sidebar-content" id="sidebarContent"></div>
 </div>
 <div class="main">
   <header>
-      <button class="menu-btn" id="menuBtn">☰</button>
+    <button class="menu-btn" id="menuBtn">☰</button>
     <div class="logo">⌘ codex <span>AI</span></div>
     <div class="spacer"></div>
     <div class="hdr-status">
       <span class="dot"></span>
       <span id="provider">opencode/big-pickle</span>
-      <span id="stats">0 msgs · $0</span>
+      <span id="stats">0 msgs·$0</span>
     </div>
     <div id="pulseBar" class="pulse-bar" style="display:none"></div>
   </header>
@@ -148,14 +178,14 @@ header .hdr-status .dot{width:6px;height:6px;border-radius:50%;background:var(--
         <div class="shortcuts">
           <span><kbd>Enter</kbd> send</span>
           <span><kbd>Shift+Enter</kbd> new line</span>
-          <span><kbd>Ctrl+K</kbd> search</span>
+          <span><kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> sidebar</span>
         </div>
       </div>
     </div>
   </div>
   <div class="input-wrap">
     <div class="input-row">
-      <textarea id="input" placeholder="Ask me anything..." rows="1"></textarea>
+      <textarea id="input" placeholder="Ask me anything..." rows="1" enterkeyhint="send"></textarea>
       <button id="sendBtn">Send</button>
     </div>
     <div class="status-bar">
@@ -177,6 +207,7 @@ const sessionIdEl = document.getElementById('sessionId');
 const tokenInfoEl = document.getElementById('tokenInfo');
 const sidebar = document.getElementById('sidebar');
 const sidebarContent = document.getElementById('sidebarContent');
+const overlay = document.getElementById('overlay');
 
 let sessionId = null;
 let assistantEl = null;
@@ -190,24 +221,26 @@ let autoScroll = true;
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2000);
+  setTimeout(() => t.classList.remove('show'), 1800);
 }
 
-function toggleSidebar() { sidebar.classList.toggle('hidden') }
+function toggleSidebar() {
+  const isHidden = sidebar.classList.toggle('hidden');
+  overlay.classList.toggle('show', !isHidden);
+}
+
+overlay.addEventListener('click', toggleSidebar);
 
 function formatTime(ts) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatDate(ts) {
   const d = new Date(ts);
   const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
+  if (d.toDateString() === now.toDateString()) return formatTime(ts);
   const yesterday = new Date(now); yesterday.setDate(yesterday.getDate()-1);
-  const isYesterday = d.toDateString() === yesterday.toDateString();
-  if (sameDay) return formatTime(ts);
-  if (isYesterday) return 'Yesterday ' + formatTime(ts);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday ' + formatTime(ts);
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + formatTime(ts);
 }
 
@@ -218,7 +251,7 @@ function scrollBottom() {
 
 msgs.addEventListener('scroll', () => {
   const dist = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight;
-  autoScroll = dist < 40;
+  autoScroll = dist < 50;
 });
 
 function escapeHtml(s) {
@@ -244,6 +277,13 @@ function copyBlock(btn) {
   navigator.clipboard.writeText(code).then(() => {
     btn.textContent = 'copied!';
     setTimeout(() => btn.textContent = 'copy', 1500);
+  }).catch(() => {
+    const range = document.createRange();
+    range.selectNode(btn.parentElement.querySelector('code'));
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+    document.execCommand('copy'); window.getSelection().removeAllRanges();
+    btn.textContent = 'copied!';
+    setTimeout(() => btn.textContent = 'copy', 1500);
   });
 }
 
@@ -260,7 +300,7 @@ function addBubble(role, html, extra) {
     cb.className = 'copy-btn'; cb.textContent = 'copy';
     cb.onclick = () => {
       const txt = div.querySelector('.bubble')?.textContent || '';
-      navigator.clipboard.writeText(txt).then(() => toast('Copied!'));
+      navigator.clipboard.writeText(txt).then(() => toast('Copied!')).catch(() => toast('Copy failed'));
     };
     head.appendChild(cb);
   }
@@ -316,7 +356,7 @@ function showToolResult(name, result) {
   if (el) {
     const r = document.createElement('div');
     r.className = 'result';
-    r.textContent = (typeof result === 'string' ? result : JSON.stringify(result)).substring(0, 600);
+    r.textContent = (typeof result === 'string' ? result : JSON.stringify(result)).substring(0, 2000);
     el.appendChild(r);
   }
   scrollBottom();
@@ -372,6 +412,7 @@ async function sendMessage(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text, sessionId }),
     });
+    if (!res.ok) { showError('Server error ' + res.status); setBusy(false); return; }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
@@ -393,8 +434,8 @@ async function sendMessage(text) {
             case 'session': sessionId = ev.id; sessionIdEl.textContent = sessionId?.substring(0, 8) || ''; loadSessions(); break;
             case 'status':
               providerEl.textContent = ev.provider + '/' + ev.model;
-              statsEl.textContent = ev.msgs + ' msgs · $' + ev.cost.toFixed(4);
-              tokenInfoEl.textContent = 'free';
+              statsEl.textContent = ev.msgs + ' msgs·$' + ev.cost.toFixed(4);
+              tokenInfoEl.textContent = ev.cost === 0 ? 'free' : '$' + ev.cost.toFixed(4);
               break;
             case 'stopped':
               assistantEl = null; assistantBuf = '';
@@ -435,15 +476,15 @@ input.addEventListener('keydown', e => {
     if (busy) { stopGeneration(); return; }
     if (text) { input.value = ''; input.style.height = 'auto'; sendMessage(text); }
   }
-  if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+  if ((e.key === 'k' && (e.ctrlKey || e.metaKey)) || e.key === 'Escape') {
     e.preventDefault();
-    toggleSidebar();
+    if (!sidebar.classList.contains('hidden')) toggleSidebar();
   }
 });
 
 input.addEventListener('input', () => {
   input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  input.style.height = Math.min(input.scrollHeight, 100) + 'px';
 });
 
 function switchTab(tab) {
@@ -453,7 +494,7 @@ function switchTab(tab) {
 }
 
 function showEmpty() {
-  msgsInner.innerHTML = '<div class="empty-state" id="empty"><h2>Codex CLI</h2><p>AI coding agent with full file and shell access on your machine.</p><div class="shortcuts"><span><kbd>Enter</kbd> send</span><span><kbd>Shift+Enter</kbd> new line</span><span><kbd>Ctrl+K</kbd> search</span></div></div>';
+  msgsInner.innerHTML = '<div class="empty-state" id="empty"><h2>Codex CLI</h2><p>AI coding agent with full file and shell access on your machine.</p><div class="shortcuts"><span><kbd>Enter</kbd> send</span><span><kbd>Shift+Enter</kbd> new line</span><span><kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> sidebar</span></div></div>';
   empty = document.getElementById('empty');
 }
 
@@ -465,12 +506,13 @@ async function newChat() {
     sessionIdEl.textContent = sessionId?.substring(0, 8) || '';
     showEmpty();
     loadSessions();
-    toast('New chat created');
-  } catch(e) { toast('Error'); }
+    toast('New chat');
+  } catch(e) { toast('Error creating chat'); }
 }
 
 async function loadSession(id) {
   if (busy) stopGeneration();
+  if (window.innerWidth < 1024) toggleSidebar();
   try {
     const res = await fetch('/api/session/load', {
       method: 'POST',
@@ -484,7 +526,7 @@ async function loadSession(id) {
     assistantEl = null; assistantBuf = '';
     reasoningEl = null; reasoningBuf = '';
     const msgs = Array.isArray(data.messages) ? data.messages : [];
-    if (!msgs.length) { showEmpty(); loadSessions(); return toast('Session is empty'); }
+    if (!msgs.length) { showEmpty(); loadSessions(); return; }
     let html = '';
     for (const m of msgs) {
       const role = m.role || 'unknown';
@@ -499,7 +541,7 @@ async function loadSession(id) {
         html += '<div class="msg assistant"><div class="head"><span class="role">Codex</span><span class="time">' + ts + '</span></div><div class="bubble">' + renderMarkdown(m.content || '') + '</div></div>';
       } else if (role === 'tool') {
         const toolName = m.tool_name || m.name || 'Tool';
-        html += '<div class="msg tool"><div class="head"><span class="role">Tool</span><span class="time">' + ts + '</span></div><div class="bubble"><div class="info"><span>⚙</span><span class="name">' + escapeHtml(toolName) + '</span></div><div class="result">' + escapeHtml((m.content || '').substring(0, 600)) + '</div></div></div>';
+        html += '<div class="msg tool"><div class="head"><span class="role">Tool</span><span class="time">' + ts + '</span></div><div class="bubble"><div class="info"><span>⚙</span><span class="name">' + escapeHtml(toolName) + '</span></div><div class="result">' + escapeHtml((m.content || '').substring(0, 2000)) + '</div></div></div>';
       } else {
         html += '<div class="msg"><div class="head"><span class="role">' + escapeHtml(role) + '</span><span class="time">' + ts + '</span></div><div class="bubble">' + escapeHtml(m.content || '') + '</div></div>';
       }
@@ -507,7 +549,7 @@ async function loadSession(id) {
     msgsInner.innerHTML = html;
     empty = null;
     loadSessions();
-    toast('Loaded ' + msgs.length + ' messages');
+    msgs.scrollTop = msgs.scrollHeight;
   } catch(e) { toast('Error: ' + e.message); }
 }
 
@@ -516,12 +558,12 @@ async function loadSessions() {
     const res = await fetch('/api/sessions');
     const sessions = await res.json();
     let html = '<div class="section-title">Recent Chats</div>';
-    if (!sessions.length) html += '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:11px">No chats yet. Start a new conversation!</div>';
+    if (!sessions.length) html += '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:11px;line-height:1.5">No chats yet.<br>Start a new conversation!</div>';
     for (const s of sessions) {
       const active = s.id === sessionId ? ' active' : '';
       const preview = s.preview || '(empty)';
       const date = formatDate(s.updated || s.created);
-      html += '<div class="session-item' + active + '" data-sid="' + s.id + '"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:0"><div class="s-time">' + date + '</div><div class="s-preview">' + escapeHtml(preview) + '</div><div class="s-count">' + s.msgCount + ' messages</div></div><button class="del-btn" data-sid="' + s.id + '" title="Delete">✕</button></div></div>';
+      html += '<div class="session-item' + active + '" data-sid="' + s.id + '"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:0"><div class="s-time">' + date + '</div><div class="s-preview">' + escapeHtml(preview) + '</div><div class="s-count">' + s.msgCount + ' msgs</div></div><button class="del-btn" data-sid="' + s.id + '" title="Delete">✕</button></div></div>';
     }
     sidebarContent.innerHTML = html;
   } catch(e) {}
@@ -551,7 +593,7 @@ async function loadSkills() {
     const res = await fetch('/api/skills');
     const skills = await res.json();
     let html = '<div class="section-title">Installed Skills & Plugins</div>';
-    if (!skills.length) html += '<div style="padding:24px 16px;text-align:center;color:var(--text-dim);font-size:12px;line-height:1.6">No skills found<br><span style="font-size:10px;opacity:.6">Skills are installed via the skill-installer or placed in ~/.codex/skills/</span></div>';
+    if (!skills.length) html += '<div style="padding:24px 16px;text-align:center;color:var(--text-dim);font-size:12px;line-height:1.6">No skills found<br><span style="font-size:10px;opacity:.6">Skills go in ~/.codex/skills/</span></div>';
     for (const s of skills) {
       html += '<div class="skill-item"><div class="s-name">' + escapeHtml(s.name) + '</div><div class="s-desc">' + escapeHtml(s.description) + '</div><span class="s-badge">' + (s.hasSkillMd ? '✓ active' : 'plugin') + '</span></div>';
     }

@@ -1,6 +1,6 @@
 {
   "name": "codex-cli",
-  "version": "0.4.0-arm32",
+  "version": "1.0.0-lite",
   "description": "Codex CLI - AI coding agent for ARM32 with free OpenCode Zen models",
   "license": "Apache-2.0",
   "bin": {
@@ -8,7 +8,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "files": [
     "bin",

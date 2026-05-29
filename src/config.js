@@ -200,33 +200,32 @@ export function updateTokenCache(input, output, cost) {
 
 export function getSystemPrompt(instructions) {
   const prov = getProvider();
-  let prompt = `You are Codex CLI, an AI coding agent running on the user's device.
-You have full access to files and shell.`;
+  const isLocal = prov === 'ollama' || prov === 'lmstudio';
+  let prompt = `You are Codex CLI, an AI coding agent running on the user's device. You have full access to files and shell.
 
-  if (prov === 'ollama' || prov === 'lmstudio') {
+CRITICAL: Never repeat yourself. Each response must be different from the last. Vary your wording, structure, and approach. If you catch yourself starting to say the same thing, stop and rephrase.
+
+Available tools: read, write, edit, bash, glob, grep, ls, append, move, delete.
+Use tools when you need to interact with files or shell. For simple chat just reply naturally.`;
+
+  if (isLocal) {
     prompt += `
-When you need to perform an action, output a JSON block like:
+
+When using tools, output JSON like:
 {"tool":"read","args":{"path":"file.js"}}
 {"tool":"write","args":{"path":"file.js","content":"..."}}
 {"tool":"edit","args":{"path":"file.js","oldString":"...","newString":"..."}}
-{"tool":"bash","args":{"command":"ls","description":"list files"}}
-{"tool":"glob","args":{"pattern":"**/*.js"}}
-{"tool":"grep","args":{"pattern":"function"}}
-
-Output ONE tool call per response. After the tool runs you will see its result.
-Tools: read, write, edit, bash, glob, grep, ls, append, move, delete
-Be concise. Never repeat the same action. Vary your responses.`;
-  } else {
-    prompt += `
-You have tools available: read, write, edit, bash, glob, grep, ls, append, move, delete.
-Use them when needed. For simple chat just reply naturally.
-
-Guidelines:
-- Never repeat the same phrase or action twice
-- Keep responses concise, no long analysis if not asked
-- If a tool call returns the same result, try something different
-- Avoid repetitive loops — vary your approach each turn`;
+{"tool":"bash","args":{"command":"ls","description":"list files"}}`;
   }
+
+  prompt += `
+
+Rules:
+- Vary every response — different words, different sentence structure
+- Keep responses concise unless the user asks for detail
+- If a tool returns similar results, try a different approach
+- No repetitive loops — do the task and stop
+- For code edits: explain what changed briefly, don't narrate the process`;
 
   if (instructions) prompt += `\n\nProject Instructions:\n${instructions}`;
   return prompt;

@@ -491,6 +491,8 @@ async function handleSlashCommand(text) {
 
 async function runAgent(messages) {
   let loopCount = 0;
+  let lastToolNames = [];
+  let lastToolHashes = [];
   do {
     const instructions = loadProjectInstructions(process.cwd());
     const systemMsg = { role: 'system', content: getSystemPrompt(instructions) };
@@ -533,6 +535,30 @@ async function runAgent(messages) {
     if (messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.tool_calls) {
       messages[messages.length - 1] = asstMsg;
     } else messages.push(asstMsg);
+
+    const currentNames = toolCalls.map(tc => tc.function.name);
+    const currentHashes = toolCalls.map(tc => tc.function.name + '|' + tc.function.arguments);
+    lastToolNames.push(currentNames);
+    lastToolHashes.push(currentHashes);
+    if (lastToolNames.length > 5) lastToolNames.shift();
+    if (lastToolHashes.length > 5) lastToolHashes.shift();
+
+    if (lastToolNames.length >= 3) {
+      const last3 = lastToolNames.slice(-3);
+      if (last3[0].length === last3[1].length && last3[1].length === last3[2].length &&
+          last3[0].every((v, i) => v === last3[1][i] && v === last3[2][i])) {
+        console.warn('\n  \x1b[33m⚠ Repetitive tool calls detected. Breaking loop.\x1b[0m');
+        break;
+      }
+    }
+    if (lastToolHashes.length >= 3) {
+      const last3 = lastToolHashes.slice(-3);
+      if (last3[0].length === last3[1].length && last3[1].length === last3[2].length &&
+          last3[0].every((v, i) => v === last3[1][i] && v === last3[2][i])) {
+        console.warn('\n  \x1b[33m⚠ Duplicate tool call sequence detected. Breaking loop.\x1b[0m');
+        break;
+      }
+    }
 
     for (const tc of toolCalls) {
       process.stdout.write(`\x1b[90m--- ${tc.function.name} ---\x1b[0m\n`);

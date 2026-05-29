@@ -7,7 +7,7 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step()  { echo -e "${CYAN}[STEP]${NC} $1"; }
 
-REPO_URL="${1:-https://github.com/tundefund0-gif/codex-arm32.git}"
+REPO_URL="${1:-https://github.com/tundefund0-gif/codex-arm32-lite.git}"
 INSTALL_DIR="$HOME/codex-arm32"
 
 check_arch() {

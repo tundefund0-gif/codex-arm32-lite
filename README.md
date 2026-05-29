@@ -42,7 +42,7 @@ codex
 ```bash
 pkg update && pkg upgrade -y
 pkg install nodejs git -y
-curl -sSf https://raw.githubusercontent.com/tundefund0-gif/codex-arm32/main/install-termux.sh | bash
+curl -sSf https://raw.githubusercontent.com/tundefund0-gif/codex-arm32-lite/main/install-termux.sh | bash
 ```
 
 Or manually:
