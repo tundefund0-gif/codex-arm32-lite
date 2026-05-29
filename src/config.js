@@ -13,10 +13,18 @@ const MODEL_PRICING = {
   'gpt-4.1': { input: 2.00, output: 8.00, cached: 0.50 },
   'gpt-4.1-mini': { input: 0.40, output: 1.60, cached: 0.10 },
   'gpt-4.1-nano': { input: 0.10, output: 0.40, cached: 0.025 },
+  'gpt-4.5-preview': { input: 75.00, output: 150.00, cached: 37.50 },
   'gpt-5.5': { input: 3.00, output: 12.00, cached: 0.75 },
   'gpt-5.4': { input: 2.50, output: 10.00, cached: 0.625 },
+  'gpt-5.4-mini': { input: 0.50, output: 2.00, cached: 0.125 },
   'big-pickle': { input: 0, output: 0, cached: 0 },
+  'o3': { input: 10.00, output: 40.00, cached: 2.50 },
+  'o4-mini': { input: 1.10, output: 4.40, cached: 0.275 },
 };
+
+export function ensureConfigDir() {
+  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
+}
 
 export function loadConfig() {
   if (!existsSync(CONFIG_PATH)) return {};
@@ -25,7 +33,7 @@ export function loadConfig() {
 }
 
 export function saveConfig(config) {
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
+  ensureConfigDir();
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
@@ -86,17 +94,26 @@ export function getBaseUrl() {
 
 export function needsApiKey() {
   const p = getProvider();
-  return p === 'openai' || (p === 'opencode' && !process.env.OPENCODE_API_KEY);
+  return p === 'openai';
+}
+
+const VISION_MODELS = ['gpt-4o', 'gpt-4.1', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'o3', 'o4-mini'];
+
+export function supportsVision() {
+  const model = getModel();
+  return VISION_MODELS.includes(model) || loadConfig().vision === true;
 }
 
 let _ollamaCheck = null;
+let _ollamaCheckTime = 0;
 
 export function isOllamaRunning() {
-  if (_ollamaCheck !== null) return _ollamaCheck;
+  if (_ollamaCheck !== null && Date.now() - _ollamaCheckTime < 30000) return _ollamaCheck;
   try {
-    execSync('curl -s http://localhost:11434/api/tags >/dev/null 2>&1 || wget -q http://localhost:11434/api/tags -O /dev/null 2>&1', { timeout: 2000 });
+    execSync('curl -sf http://localhost:11434/api/tags >/dev/null 2>&1 || wget -q http://localhost:11434/api/tags -O /dev/null 2>&1', { timeout: 2000 });
     _ollamaCheck = true;
   } catch { _ollamaCheck = false; }
+  _ollamaCheckTime = Date.now();
   return _ollamaCheck;
 }
 
@@ -105,13 +122,15 @@ export function resetOllamaCheck() {
 }
 
 let _lmStudioCheck = null;
+let _lmStudioCheckTime = 0;
 
 export function isLmStudioRunning() {
-  if (_lmStudioCheck !== null) return _lmStudioCheck;
+  if (_lmStudioCheck !== null && Date.now() - _lmStudioCheckTime < 30000) return _lmStudioCheck;
   try {
-    execSync('curl -s http://localhost:1234/v1/models >/dev/null 2>&1 || wget -q http://localhost:1234/v1/models -O /dev/null 2>&1', { timeout: 2000 });
+    execSync('curl -sf http://localhost:1234/v1/models >/dev/null 2>&1 || wget -q http://localhost:1234/v1/models -O /dev/null 2>&1', { timeout: 2000 });
     _lmStudioCheck = true;
   } catch { _lmStudioCheck = false; }
+  _lmStudioCheckTime = Date.now();
   return _lmStudioCheck;
 }
 
@@ -152,12 +171,6 @@ export function isImageFile(filepath) {
   return IMAGE_EXTENSIONS.has(ext);
 }
 
-export function supportsVision() {
-  const model = getModel();
-  const visionModels = ['gpt-4o', 'gpt-4.1', 'gpt-5.5', 'gpt-5.4'];
-  return visionModels.includes(model) || loadConfig().vision === true;
-}
-
 export function estimateTokens(text) {
   if (!text) return 0;
   let tokens = 0;
@@ -181,7 +194,7 @@ export function updateTokenCache(input, output, cost) {
   cache.totalInput += input;
   cache.totalOutput += output;
   cache.totalCost += cost;
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
+  ensureConfigDir();
   writeFileSync(TOKEN_CACHE_PATH, JSON.stringify(cache));
 }
 

@@ -119,18 +119,18 @@ header .hdr-status .dot{width:6px;height:6px;border-radius:50%;background:var(--
   <div class="sidebar-inner">
     <div class="sidebar-header">
       <h2>⌘ codex <span>v1</span></h2>
-      <button onclick="newChat()">+ New</button>
+      <button id="newChatBtn">+ New</button>
     </div>
     <div class="sidebar-tabs">
-      <button class="active" data-tab="sessions" onclick="switchTab('sessions')">Chats</button>
-      <button data-tab="skills" onclick="switchTab('skills')">Skills</button>
+      <button class="active" data-tab="sessions" id="tabSessions">Chats</button>
+      <button data-tab="skills" id="tabSkills">Skills</button>
     </div>
     <div class="sidebar-content" id="sidebarContent"></div>
   </div>
 </div>
 <div class="main">
   <header>
-    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <button class="menu-btn" id="menuBtn">☰</button>
     <div class="logo">⌘ codex <span>AI</span></div>
     <div class="spacer"></div>
     <div class="hdr-status">
@@ -492,7 +492,7 @@ async function loadSession(id) {
       if (role === 'user') {
         html += '<div class="msg user"><div class="head"><span class="role">You</span><span class="time">' + ts + '</span></div><div class="bubble">' + escapeHtml(m.content || '') + '</div></div>';
       } else if (role === 'assistant') {
-        if (m.tool_calls) continue;
+        if (m.tool_calls && !m.content) continue;
         if (m.reasoning_content) {
           html += '<div class="msg reasoning"><div class="head"><span class="role">Thinking</span><span class="time">' + ts + '</span></div><div class="bubble"><div class="summary"><span class="arrow">▸</span> <span>Show reasoning</span></div><div class="content">' + escapeHtml(m.reasoning_content) + '</div></div></div>';
         }
@@ -572,6 +572,11 @@ sidebarContent.addEventListener('click', (e) => {
     if (id) loadSession(id);
   }
 });
+
+document.getElementById('menuBtn').addEventListener('click', toggleSidebar);
+document.getElementById('newChatBtn').addEventListener('click', newChat);
+document.getElementById('tabSessions').addEventListener('click', () => switchTab('sessions'));
+document.getElementById('tabSkills').addEventListener('click', () => switchTab('skills'));
 
 input.focus();
 loadSessions();

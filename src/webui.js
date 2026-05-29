@@ -12,6 +12,7 @@ const TOOLS_DEFINITION = tools.map(t => ({
 }));
 
 const HTML = readFileSync(join(import.meta.dirname, 'index.html'), 'utf-8');
+const MAX_BODY_SIZE = 10 * 1024 * 1024;
 
 let currentSession = null;
 let currentAbort = null;
@@ -59,6 +60,24 @@ function listSkills() {
 
   for (const root of searchRoots) scan(root);
   return results;
+}
+
+function collectBody(req, maxSize = MAX_BODY_SIZE) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > maxSize) {
+        req.destroy(new Error('Request body too large'));
+        reject(new Error('Request body too large'));
+        return;
+      }
+      body += chunk.toString();
+    });
+    req.on('end', () => resolve(body));
+    req.on('error', reject);
+  });
 }
 
 export function startWebUI(port = 5000) {
@@ -110,9 +129,7 @@ export function startWebUI(port = 5000) {
     }
 
     if (req.method === 'POST' && req.url === '/api/session/load') {
-      let body = '';
-      req.on('data', c => body += c);
-      req.on('end', () => {
+      collectBody(req).then(body => {
         try {
           const { id } = JSON.parse(body);
           const loaded = Session.load(id);
@@ -133,14 +150,15 @@ export function startWebUI(port = 5000) {
           res.writeHead(400);
           res.end('Bad request');
         }
+      }).catch(err => {
+        res.writeHead(err.message === 'Request body too large' ? 413 : 400);
+        res.end(err.message);
       });
       return;
     }
 
     if (req.method === 'POST' && req.url === '/api/session/delete') {
-      let body = '';
-      req.on('data', c => body += c);
-      req.on('end', () => {
+      collectBody(req).then(body => {
         try {
           const { id } = JSON.parse(body);
           const ok = deleteSession(id);
@@ -150,6 +168,9 @@ export function startWebUI(port = 5000) {
           res.writeHead(400);
           res.end('Bad request');
         }
+      }).catch(err => {
+        res.writeHead(400);
+        res.end(err.message);
       });
       return;
     }
@@ -178,54 +199,67 @@ export function startWebUI(port = 5000) {
     process.stdout.write(`  \x1b[90m→\x1b[0m \x1b[4mhttp://localhost:${port}\x1b[0m\n\n`);
   });
 
+  function shutdown() {
+    if (currentAbort) currentAbort.abort();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 3000).unref();
+  }
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
   return server;
 }
 
 async function handleChat(req, res) {
-  let body = '';
-  req.on('data', chunk => body += chunk);
-  req.on('end', async () => {
-    try {
-      const { message, sessionId } = JSON.parse(body);
+  let body;
+  try {
+    body = await collectBody(req);
+  } catch (err) {
+    res.writeHead(err.message === 'Request body too large' ? 413 : 400);
+    res.end(err.message);
+    return;
+  }
 
-      if (!currentSession || (sessionId && currentSession.id !== sessionId)) {
-        const loaded = sessionId ? Session.load(sessionId) : null;
-        currentSession = loaded || new Session(null, process.cwd());
-      }
+  try {
+    const { message, sessionId } = JSON.parse(body);
 
-      currentSession.messages.push({ role: 'user', content: message });
-      currentSession.save();
-
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      });
-
-      sendSSE(res, { type: 'session', id: currentSession.id });
-      sendSSE(res, { type: 'status', provider: getProvider(), model: getModel(), msgs: currentSession.messages.length, cost: getTokenCache().totalCost });
-
-      currentAbort = new AbortController();
-
-      try {
-        await runAgentWeb(currentSession.messages, res, currentAbort.signal);
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          sendSSE(res, { type: 'stopped' });
-        } else {
-          sendSSE(res, { type: 'error', content: err.message });
-        }
-      }
-
-      currentAbort = null;
-      currentSession.save();
-      sendSSE(res, { type: 'done' });
-      res.end();
-    } catch (err) {
-      res.writeHead(400);
-      res.end('Invalid request');
+    if (!currentSession || (sessionId && currentSession.id !== sessionId)) {
+      const loaded = sessionId ? Session.load(sessionId) : null;
+      currentSession = loaded || new Session(null, process.cwd());
     }
-  });
+
+    currentSession.messages.push({ role: 'user', content: message });
+    currentSession.save();
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+
+    sendSSE(res, { type: 'session', id: currentSession.id });
+    sendSSE(res, { type: 'status', provider: getProvider(), model: getModel(), msgs: currentSession.messages.length, cost: getTokenCache().totalCost });
+
+    currentAbort = new AbortController();
+
+    try {
+      await runAgentWeb(currentSession.messages, res, currentAbort.signal);
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        sendSSE(res, { type: 'stopped' });
+      } else {
+        sendSSE(res, { type: 'error', content: err.message });
+      }
+    }
+
+    currentAbort = null;
+    currentSession.save();
+    sendSSE(res, { type: 'done' });
+    res.end();
+  } catch (err) {
+    res.writeHead(400);
+    res.end('Invalid request');
+  }
 }
 
 async function runAgentWeb(messages, res, signal) {

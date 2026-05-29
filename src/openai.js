@@ -25,6 +25,24 @@ function getClient() {
   return client;
 }
 
+const MAX_RETRIES = 2;
+
+async function retryableCreate(openai, params, retries = MAX_RETRIES) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await openai.chat.completions.create(params);
+    } catch (err) {
+      const isRetryable = err.status === 429 || err.status === 500 || err.status === 503 || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT';
+      if (attempt < retries && isRetryable) {
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 export async function chatWithTools(messages, tools, onChunk) {
   const openai = getClient();
   const model = getModel();
@@ -70,7 +88,7 @@ export async function chatWithTools(messages, tools, onChunk) {
 
   try {
     startSpinner();
-    const stream = await openai.chat.completions.create({
+    const stream = await retryableCreate(openai, {
       model,
       messages: messages,
       tools: apiTools,
@@ -125,7 +143,8 @@ export async function chatWithTools(messages, tools, onChunk) {
   totalInput += outputTokens;
 
   const pricing = getPricing(model);
-  const cost = currentProvider === 'ollama' ? 0 : (totalInput * pricing.input + outputTokens * pricing.output) / 1_000_000;
+  const isFree = currentProvider === 'ollama' || currentProvider === 'lmstudio' || currentProvider === 'opencode';
+  const cost = isFree ? 0 : (totalInput * pricing.input + outputTokens * pricing.output) / 1_000_000;
   updateTokenCache(totalInput, outputTokens, cost);
 
   let parsedCalls = toolCalls.filter(Boolean);
@@ -139,18 +158,23 @@ export async function chatWithTools(messages, tools, onChunk) {
 
 async function parseLocalToolCalls(content) {
   const calls = [];
-  const jsonRegex = /\{"tool"\s*:\s*"(\w+)"\s*,\s*"args"\s*:\s*(\{.*?\})\s*\}/g;
-  let match;
+  const seen = new Set();
 
+  const jsonRegex = /\{(?:[^{}]|"(?:\\.|[^"\\])*")*}/g;
+  let match;
   while ((match = jsonRegex.exec(content)) !== null) {
     try {
-      const name = match[1];
-      const args = JSON.parse(match[2]);
-      calls.push({
-        id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        type: 'function',
-        function: { name, arguments: JSON.stringify(args) },
-      });
+      const parsed = JSON.parse(match[0]);
+      if (parsed && typeof parsed === 'object' && parsed.tool && parsed.args) {
+        const key = parsed.tool + JSON.stringify(parsed.args);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        calls.push({
+          id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          type: 'function',
+          function: { name: parsed.tool, arguments: JSON.stringify(parsed.args) },
+        });
+      }
     } catch {}
   }
 

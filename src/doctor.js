@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { execSync } from 'child_process';
@@ -23,7 +23,7 @@ function getVersion(cmd) {
 
 export async function runDoctor() {
   const pkg = JSON.parse(
-    (await import('fs')).readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+    readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
   );
 
   console.log(`\n  \x1b[1;36mCodex Doctor\x1b[0m \x1b[90mv${pkg.version} · ${process.platform}-${process.arch}\x1b[0m\n`);

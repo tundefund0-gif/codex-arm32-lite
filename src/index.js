@@ -1,14 +1,14 @@
 import { exit } from 'process';
-import { readFileSync, existsSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { chatWithTools } from './openai.js';
 import { tools, executeToolCall, addAllowedRoot, setYoloMode } from './tools.js';
 import {
   getSystemPrompt, getApiKey, setApiKey, setModel,
-  getModel, getRawModel, getProvider, getModelPrefix,
+  getModel, getRawModel, getProvider,
   getApprovalMode, setApprovalMode,
   loadConfig, getTokenCache, isOllamaRunning, resetOllamaCheck,
-  getDefaultOssModel, isLmStudioRunning,
+  getDefaultOssModel, isLmStudioRunning, ensureConfigDir,
 } from './config.js';
 import { Session, loadProjectInstructions } from './session.js';
 import { startWebUI } from './webui.js';
@@ -22,9 +22,10 @@ let yoloMode = true;
 let currentSession = null;
 let workingDir = process.cwd();
 let extraDirs = [];
+let running = false;
 
 function readLineRaw(promptStr) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const buf = [];
     let lastDataTime = 0;
     process.stdout.write(promptStr);
@@ -43,30 +44,29 @@ function readLineRaw(promptStr) {
     const onData = data => {
       const now = Date.now();
 
-      let isEnter = true;
-      for (let i = 0; i < data.length; i++) {
-        if (data[i] !== 10 && data[i] !== 13) { isEnter = false; break; }
-      }
-
-      if (isEnter) {
-        process.stdout.write('\n');
-        if (now - lastDataTime < 80) {
-          lastDataTime = now;
-          buf.push('\n');
-        } else {
-          submit();
-        }
-        return;
-      }
-
-      lastDataTime = now;
-
       for (const byte of data) {
+        if (byte === 4) { submit(); return; }
         if (byte === 127 || byte === 8) {
           if (buf.length > 0) { buf.pop(); process.stdout.write('\b \b'); }
           continue;
         }
-        if (byte === 3) { process.stdout.write('^C\n'); currentSession?.save(); exit(0); }
+        if (byte === 3) {
+          process.stdout.write('^C\n');
+          if (running) { process.stdout.write('\x1b[33m(interrupting agent...)\x1b[0m\n'); reject(new Error('Interrupted')); return; }
+          currentSession?.save(); exit(0);
+        }
+        if (byte === 10 || byte === 13) {
+          if (buf.length === 0) continue;
+          process.stdout.write('\n');
+          if (now - lastDataTime < 100) {
+            buf.push('\n');
+          } else {
+            submit(); return;
+          }
+          lastDataTime = now;
+          continue;
+        }
+        lastDataTime = now;
         const c = String.fromCharCode(byte);
         buf.push(c);
         process.stdout.write(c);
@@ -85,8 +85,7 @@ function showDashboard() {
   const cache = getTokenCache();
   const p = getProvider();
   const m = getModel();
-  const ollamaOk = isOllamaRunning();
-  const tag = p === 'openai' ? 'OpenAI' : p === 'opencode' ? 'Zen FREE' : p === 'ollama' ? (ollamaOk ? 'Ollama' : 'offline') : p === 'lmstudio' ? 'LMStudio' : 'offline';
+  const tag = p === 'openai' ? 'OpenAI' : p === 'opencode' ? 'Zen FREE' : p === 'ollama' ? 'Ollama' : p === 'lmstudio' ? 'LMStudio' : 'offline';
   const color = cache.totalCost === 0 ? '\x1b[32m' : '\x1b[36m';
 
   console.clear();
@@ -111,6 +110,7 @@ function showMiniStatus() {
 }
 
 export async function main(args) {
+  ensureConfigDir();
   if (args.length === 0) { await startInteractive(); return; }
 
   const command = args[0];
@@ -120,15 +120,16 @@ export async function main(args) {
     if (key && key.startsWith('sk-')) {
       setApiKey(key);
       console.log('\x1b[32m✓\x1b[0m API key saved.');
-    } else if (key && (key.startsWith('ollama/') || key.startsWith('opencode/'))) {
+    } else if (key && (key.startsWith('ollama/') || key.startsWith('opencode/') || key.startsWith('lmstudio/'))) {
       setModel(key);
       console.log(`\x1b[32m✓\x1b[0m Model set to ${key}.`);
     } else {
       console.log('\n  \x1b[1mChoose:\x1b[0m');
       console.log('    1. Enter OpenAI API key (sk-...)');
       console.log('    2. Use local Ollama model (ollama/qwen2.5:0.5b)');
-      console.log('    3. Use free OpenCode model (opencode/big-pickle)');
-      console.log('    4. Just press Enter for default\n');
+      console.log('    3. Use LMStudio model (lmstudio/local-model)');
+      console.log('    4. Use free OpenCode model (opencode/big-pickle)');
+      console.log('    5. Just press Enter for default\n');
       const a = await readLineRaw('  > ');
       if (a.startsWith('sk-')) {
         setApiKey(a);
@@ -136,6 +137,9 @@ export async function main(args) {
       } else if (a.startsWith('ollama/')) {
         setModel(a);
         console.log(`\x1b[32m✓\x1b[0m Using ${a}. Make sure Ollama is running.`);
+      } else if (a.startsWith('lmstudio/')) {
+        setModel(a);
+        console.log(`\x1b[32m✓\x1b[0m Using ${a}. Make sure LMStudio is running.`);
       } else if (a.startsWith('opencode/')) {
         setModel(a);
         console.log(`\x1b[32m✓\x1b[0m Using ${a} (free).`);
@@ -150,7 +154,7 @@ export async function main(args) {
   if (command === 'resume') {
     const flag = args[1];
     if (flag === '--last') {
-      const sessions = Session.list(process.cwd());
+      const sessions = Session.list(workingDir);
       if (sessions.length === 0) { console.log('No sessions.'); return; }
       currentSession = sessions[0];
       await resumeSession();
@@ -161,7 +165,7 @@ export async function main(args) {
       if (!currentSession) { console.log('Session not found.'); return; }
       await resumeSession();
     } else {
-      await pickSession(Session.list(process.cwd()));
+      await pickSession(Session.list(workingDir));
     }
     return;
   }
@@ -171,7 +175,7 @@ export async function main(args) {
     setYoloMode(true);
     const prompt = args.slice(1).join(' ');
     if (!prompt) { console.log('Usage: codex exec "your prompt"'); return; }
-    currentSession = new Session(null, process.cwd());
+    currentSession = new Session(null, workingDir);
     await runAgent([{ role: 'user', content: prompt }]);
     currentSession.save();
     return;
@@ -183,7 +187,27 @@ export async function main(args) {
   }
 
   if (command === 'fork') {
-    await pickSession(Session.list(process.cwd()), true);
+    await pickSession(Session.list(workingDir), true);
+    return;
+  }
+
+  if (command === 'list' || command === 'ls') {
+    const sessions = Session.list(workingDir);
+    if (sessions.length === 0) { console.log('No sessions.'); return; }
+    console.log();
+    for (const s of sessions) {
+      const d = new Date(s.updated).toLocaleString();
+      const p = s.messages.find(m => m.role === 'user')?.content?.substring(0, 60) || '(empty)';
+      const n = s.messages.filter(m => m.role === 'user').length;
+      console.log(`  \x1b[36m${s.id.substring(0, 8)}\x1b[0m  ${d}  \x1b[90m${n} prompts\x1b[0m  ${p}`);
+    }
+    console.log();
+    return;
+  }
+
+  if (command === 'cleanup') {
+    const removed = Session.cleanup();
+    console.log(`\x1b[32m✓\x1b[0m Removed ${removed} empty sessions.`);
     return;
   }
 
@@ -212,6 +236,7 @@ export async function main(args) {
       console.log('Model:', getModel());
       console.log('API key:', getApiKey() ? 'set' : 'not set');
       console.log('Ollama:', isOllamaRunning() ? 'running' : 'not detected');
+      console.log('LMStudio:', isLmStudioRunning() ? 'running' : 'not detected');
     } else if (action === 'enable' && args[2] === 'yolo') {
       const cfg = loadConfig(); cfg.yolo = true;
       writeFileSync(join(process.env.HOME || '/root', '.codex/config.json'), JSON.stringify(cfg, null, 2));
@@ -248,6 +273,7 @@ export async function main(args) {
   if (parsed.sandbox) approvalMode = parsed.sandbox === 'read-only' ? 'read-only' : 'auto';
   if (parsed.approval) approvalMode = parsed.approval;
   extraDirs.forEach(d => addAllowedRoot(d));
+  if (parsed.cd) process.chdir(workingDir);
 
   if (parsed.prompt) {
     currentSession = new Session(null, workingDir);
@@ -272,6 +298,7 @@ function parseFlags(args) {
     else if (a === '--ask-for-approval' || a === '-a') { r.approval = args[++i]; }
     else if (a === '--oss') { r.oss = true; }
     else if (a === '--local-provider') { r.localProvider = args[++i]; }
+    else if (a === '--search') { r.approval = r.approval || 'never'; }
     else if (a === '--help' || a === '-h') { showHelp(); exit(0); }
     else if (a === '--version' || a === '-v') {
       const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
@@ -293,9 +320,12 @@ function showHelp() {
   codex exec <prompt>            Non-interactive mode
   codex resume [--last|--all|id] Resume a session
   codex fork                     Fork a session
-  codex completion [shell]       Shell completions
+  codex web [port]               Start web UI
   codex mcp-server               Start as MCP server (stdio)
   codex doctor                   Run diagnostics
+  codex list                     List sessions
+  codex cleanup                  Remove empty sessions
+  codex completion [shell]       Shell completions
 
 \x1b[1mFlags:\x1b[0m
   -m, --model <model>         Model
@@ -303,7 +333,10 @@ function showHelp() {
   --oss                       Use open-source provider (Ollama/LMStudio)
   --local-provider <name>     Specify OSS provider (ollama or lmstudio)
   --yolo                      Skip all approvals
-  -s, --sandbox <mode>        Approval mode
+  --search                    Enable web search tool
+  -s, --sandbox <mode>        Approval mode (read-only, auto)
+  -a, --ask-for-approval <m>  Approval policy
+  -i, --image <path>          Attach image(s)
   --add-dir <path>            Extra writable dirs
 
 \x1b[1mSlash commands:\x1b[0m
@@ -313,9 +346,9 @@ function showHelp() {
 }
 
 function generateCompletions(shell) {
-  if (shell === 'zsh') return '#codex completion zsh\n_codex() {\n  local -a commands\n  commands=(\n    \'auth:Set API key or model\'\n    \'resume:Resume session\'\n    \'exec:Non-interactive\'\n    \'completion:Generate completions\'\n    \'fork:Fork session\'\n    \'web:Start web UI\'\n    \'mcp-server:Start MCP server\'\n    \'doctor:Run diagnostics\'\n  )\n  _describe command commands\n}\ncompdef _codex codex';
-  if (shell === 'bash') return '#codex completion bash\n_codex_completions() {\n  local commands="auth resume exec completion fork web mcp-server doctor"\n  COMPREPLY=($(compgen -W "$commands" -- "${COMP_WORDS[1]}"))\n}\ncomplete -F _codex_completions codex';
-  if (shell === 'fish') return '#codex completion fish\ncomplete -c codex -f -a auth -d "Set API key or model"\ncomplete -c codex -f -a resume -d "Resume session"\ncomplete -c codex -f -a exec -d "Non-interactive mode"\ncomplete -c codex -f -a mcp-server -d "Start MCP server"\ncomplete -c codex -f -a doctor -d "Run diagnostics"';
+  if (shell === 'zsh') return '#codex completion zsh\n_codex() {\n  local -a commands\n  commands=(\n    \'auth:Set API key or model\'\n    \'resume:Resume session\'\n    \'exec:Non-interactive\'\n    \'list:List sessions\'\n    \'cleanup:Remove empty sessions\'\n    \'completion:Generate completions\'\n    \'fork:Fork session\'\n    \'web:Start web UI\'\n    \'mcp-server:Start MCP server\'\n    \'doctor:Run diagnostics\'\n  )\n  _describe command commands\n}\ncompdef _codex codex';
+  if (shell === 'bash') return '#codex completion bash\n_codex_completions() {\n  local commands="auth resume exec list cleanup completion fork web mcp-server doctor"\n  COMPREPLY=($(compgen -W "$commands" -- "${COMP_WORDS[1]}"))\n}\ncomplete -F _codex_completions codex';
+  if (shell === 'fish') return '#codex completion fish\ncomplete -c codex -f -a auth -d "Set API key or model"\ncomplete -c codex -f -a resume -d "Resume session"\ncomplete -c codex -f -a exec -d "Non-interactive mode"\ncomplete -c codex -f -a web -d "Start web UI"\ncomplete -c codex -f -a mcp-server -d "Start MCP server"\ncomplete -c codex -f -a doctor -d "Run diagnostics"\ncomplete -c codex -f -a list -d "List sessions"\ncomplete -c codex -f -a cleanup -d "Remove empty sessions"';
   return '# unsupported shell';
 }
 
@@ -325,13 +358,21 @@ async function startInteractive() {
   console.log('\x1b[90m  Paste text safely, press Enter to send. Type /help for commands.\x1b[0m\n');
 
   while (true) {
-    const text = await readLineRaw('\x1b[36m>\x1b[0m ');
-    if (!text) continue;
-    if (text.startsWith('/')) { await handleSlashCommand(text); continue; }
-    currentSession.messages.push({ role: 'user', content: text });
-    await runAgent(currentSession.messages);
-    currentSession.save();
-    showMiniStatus();
+    try {
+      const text = await readLineRaw('\x1b[36m>\x1b[0m ');
+      if (!text) continue;
+      if (text.startsWith('/')) { await handleSlashCommand(text); continue; }
+      currentSession.messages.push({ role: 'user', content: text });
+      running = true;
+      await runAgent(currentSession.messages);
+      running = false;
+      currentSession.save();
+      showMiniStatus();
+    } catch (err) {
+      if (err.message === 'Interrupted') { running = false; continue; }
+      console.error(`\x1b[31mError: ${err.message}\x1b[0m`);
+      running = false;
+    }
   }
 }
 
@@ -405,7 +446,8 @@ async function handleSlashCommand(text) {
       } catch { console.log('\x1b[90m(not a git repo)\x1b[0m'); }
       break;
     case '/cost':
-    case '/tokens': {
+    case '/tokens':
+    case '/usage': {
       const cache = getTokenCache();
       const cost = cache.totalCost;
       console.log(`\n  \x1b[90mInput:\x1b[0m  ${cache.totalInput} tokens`);
@@ -414,13 +456,13 @@ async function handleSlashCommand(text) {
       break;
     }
     case '/compact': {
-      if (currentSession.messages.length < 4) { console.log('\x1b[90mToo few messages.\x1b[0m'); break; }
-      const systemIdx = currentSession.messages.findIndex(m => m.role === 'system');
-      const keep = currentSession.messages.slice(systemIdx + 1);
-      const a = keep.filter(m => m.role === 'assistant').length;
-      const u = keep.filter(m => m.role === 'user').length;
-      const compacted = currentSession.messages.slice(0, systemIdx + 1);
-      compacted.push({ role: 'system', content: `[Previous: ${a} assistant, ${u} user turns. Compacted at ${new Date().toISOString()}]` });
+      if (!currentSession || currentSession.messages.length < 4) { console.log('\x1b[90mToo few messages.\x1b[0m'); break; }
+      const a = currentSession.messages.filter(m => m.role === 'assistant').length;
+      const u = currentSession.messages.filter(m => m.role === 'user').length;
+      const compacted = [];
+      compacted.push({ role: 'system', content: `[Session compacted: ${a} assistant, ${u} user turns at ${new Date().toISOString()}]` });
+      const lastUser = [...currentSession.messages].reverse().find(m => m.role === 'user');
+      if (lastUser) compacted.push(lastUser);
       currentSession.messages = compacted;
       console.log(`\x1b[90mCompacted to ${compacted.length} messages.\x1b[0m`);
       break;
@@ -429,6 +471,14 @@ async function handleSlashCommand(text) {
       currentSession?.save();
       console.log('\x1b[32m✓\x1b[0m Saved.');
       break;
+    case '/export': {
+      if (!currentSession) { console.log('\x1b[33mNo session.\x1b[0m'); break; }
+      const json = JSON.stringify({ session: currentSession.id, messages: currentSession.messages }, null, 2);
+      const path = join(process.cwd(), `codex-session-${currentSession.id.substring(0, 8)}.json`);
+      writeFileSync(path, json);
+      console.log(`\x1b[32m✓\x1b[0m Exported to ${path}`);
+      break;
+    }
     case '/exit':
     case '/quit':
       currentSession?.save();
@@ -449,9 +499,17 @@ async function runAgent(messages) {
 
     process.stdout.write('\n');
 
-    const { content, reasoningContent, toolCalls, usage } = await chatWithTools(chatMessages, TOOLS_DEFINITION, (chunk) => {
-      process.stdout.write(chunk);
-    });
+    let response;
+    try {
+      response = await chatWithTools(chatMessages, TOOLS_DEFINITION, (chunk) => {
+        process.stdout.write(chunk);
+      });
+    } catch (err) {
+      process.stdout.write(`\n\x1b[31m${err.message}\x1b[0m\n`);
+      return;
+    }
+
+    const { content, reasoningContent, toolCalls } = response;
 
     if (content) {
       const last = messages[messages.length - 1];
@@ -478,7 +536,11 @@ async function runAgent(messages) {
 
     for (const tc of toolCalls) {
       process.stdout.write(`\x1b[90m--- ${tc.function.name} ---\x1b[0m\n`);
-      messages.push(await executeToolCall(tc, approvalMode));
+      try {
+        messages.push(await executeToolCall(tc, approvalMode));
+      } catch (err) {
+        messages.push({ role: 'tool', tool_call_id: tc.id, tool_name: tc.function.name, content: `Error: ${err.message}` });
+      }
     }
 
     loopCount++;
@@ -494,13 +556,21 @@ async function resumeSession() {
   console.log(`\x1b[90m  Resumed ${currentSession.id} from ${new Date(currentSession.created).toLocaleString()}\x1b[0m\n`);
 
   while (true) {
-    const text = await readLineRaw('\x1b[36m>\x1b[0m ');
-    if (!text) continue;
-    if (text.startsWith('/')) { await handleSlashCommand(text); continue; }
-    currentSession.messages.push({ role: 'user', content: text });
-    await runAgent(currentSession.messages);
-    currentSession.save();
-    showMiniStatus();
+    try {
+      const text = await readLineRaw('\x1b[36m>\x1b[0m ');
+      if (!text) continue;
+      if (text.startsWith('/')) { await handleSlashCommand(text); continue; }
+      currentSession.messages.push({ role: 'user', content: text });
+      running = true;
+      await runAgent(currentSession.messages);
+      running = false;
+      currentSession.save();
+      showMiniStatus();
+    } catch (err) {
+      if (err.message === 'Interrupted') { running = false; continue; }
+      console.error(`\x1b[31mError: ${err.message}\x1b[0m`);
+      running = false;
+    }
   }
 }
 

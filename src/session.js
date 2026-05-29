@@ -43,14 +43,15 @@ export class Session {
   }
 
   static load(id) {
+    if (!id || typeof id !== 'string') return null;
     const path = join(SESSIONS_DIR, id, 'session.json');
     if (!existsSync(path)) return null;
     try {
       const data = JSON.parse(readFileSync(path, 'utf-8'));
       const s = new Session(data.id, data.cwd);
       s.messages = data.messages || [];
-      s.created = data.created;
-      s.updated = data.updated;
+      s.created = data.created || Date.now();
+      s.updated = data.updated || Date.now();
       s.metadata = data.metadata || {};
       return s;
     } catch {
@@ -60,9 +61,11 @@ export class Session {
 
   static list(cwd) {
     ensureDir(SESSIONS_DIR);
-    const entries = readdirSync(SESSIONS_DIR);
+    let entries;
+    try { entries = readdirSync(SESSIONS_DIR); } catch { return []; }
     const sessions = [];
     for (const id of entries) {
+      if (id.startsWith('.')) continue;
       const s = Session.load(id);
       if (s) {
         if (!cwd || s.cwd === cwd) {
@@ -76,6 +79,22 @@ export class Session {
 
   static listAll() {
     return Session.list();
+  }
+
+  static cleanup() {
+    ensureDir(SESSIONS_DIR);
+    let entries;
+    try { entries = readdirSync(SESSIONS_DIR); } catch { return 0; }
+    let removed = 0;
+    for (const id of entries) {
+      if (id.startsWith('.')) continue;
+      const s = Session.load(id);
+      if (!s || !s.messages || s.messages.length === 0) {
+        const dir = join(SESSIONS_DIR, id);
+        try { rmSync(dir, { recursive: true }); removed++; } catch {}
+      }
+    }
+    return removed;
   }
 }
 
@@ -113,9 +132,10 @@ export function loadCodexIgnore(cwd) {
 }
 
 export function deleteSession(id) {
+  if (!id || typeof id !== 'string') return false;
   const dir = join(SESSIONS_DIR, id);
   if (existsSync(dir)) {
-    rmSync(dir, { recursive: true });
+    rmSync(dir, { recursive: true, force: true });
     return true;
   }
   return false;

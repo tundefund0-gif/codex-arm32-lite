@@ -16,7 +16,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tundefund0-gif/codex-arm32.git"
+    "url": "git+https://github.com/tundefund0-gif/codex-arm32-lite.git"
   },
   "dependencies": {
     "openai": "^4.73.0"
